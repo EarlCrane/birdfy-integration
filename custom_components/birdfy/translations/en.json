@@ -1,0 +1,21 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Birdfy",
+        "description": "Enter your Netvue/Birdfy account credentials.",
+        "data": {
+          "email": "Email",
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid email or password.",
+      "cannot_connect": "Cannot connect to Birdfy API. Check your internet connection."
+    },
+    "abort": {
+      "already_configured": "This Birdfy account is already configured."
+    }
+  }
+}

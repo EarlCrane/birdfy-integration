@@ -1,0 +1,12 @@
+{
+  "domain": "birdfy",
+  "name": "Birdfy",
+  "version": "1.0.0",
+  "documentation": "https://github.com/sebsst/birdfy-integration",
+  "issue_tracker": "https://github.com/sebsst/birdfy-integration/issues",
+  "requirements": ["aiohttp>=3.8.0"],
+  "dependencies": ["media_source"],
+  "codeowners": ["@sebsst"],
+  "iot_class": "cloud_polling",
+  "config_flow": true
+}
