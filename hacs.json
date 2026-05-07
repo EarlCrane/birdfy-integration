@@ -1,4 +1,5 @@
 {
-  "name": "Birdfy RTSP Proxy",
-  "render_readme": true
+  "name": "Birdfy Recordings",
+  "render_readme": true,
+  "filename": "birdfy"
 }
