@@ -17,7 +17,10 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     coordinator: BirdfyCoordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([BirdfyLastEventSensor(coordinator, entry)])
+    async_add_entities([
+        BirdfyLastEventSensor(coordinator, entry),
+        BirdfyHighlightsSensor(coordinator, entry),
+    ])
 
 
 class BirdfyLastEventSensor(CoordinatorEntity[BirdfyCoordinator], SensorEntity):
@@ -48,7 +51,21 @@ class BirdfyLastEventSensor(CoordinatorEntity[BirdfyCoordinator], SensorEntity):
             ) if alert_time else None,
             "record_url":    last.get("record_url"),
             "image_url":     self.coordinator.image_url,
-            "highlights_url": self.coordinator.highlights_url,
             "device_id":     data.get("device_id"),
             "recent_events": data.get("recent_events", []),
         }
+
+
+class BirdfyHighlightsSensor(CoordinatorEntity[BirdfyCoordinator], SensorEntity):
+    """Birdfy highlights URL sensor."""
+
+    _attr_icon = "mdi:star"
+
+    def __init__(self, coordinator: BirdfyCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_highlights"
+        self._attr_name = "Birdfy Highlights"
+
+    @property
+    def native_value(self) -> str:
+        return self.coordinator.highlights_url or None
