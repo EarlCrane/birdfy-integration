@@ -22,7 +22,6 @@ def register_views(hass: HomeAssistant) -> None:
 
 
 def _segment_sort_key(url: str) -> tuple[int, int]:
-    """Return (codec, fragment) integers from slice_{codec}_{fragment}_{flag}.ts filename."""
     import re
     m = re.search(r"slice_(\d+)_(\d+)_\d+\.ts", url)
     if m:
@@ -31,17 +30,31 @@ def _segment_sort_key(url: str) -> tuple[int, int]:
 
 
 def _build_m3u8_from_segments(segments: list[str]) -> str:
-    """Build a valid HLS playlist from a list of .ts URLs with JWT tokens."""
+    """Build a valid HLS playlist, inserting EXT-X-DISCONTINUITY at every GOP/fragment gap."""
+    import re
     sorted_segments = sorted(segments, key=_segment_sort_key)
     lines = [
         "#EXTM3U",
-        "#EXT-X-INDEPENDENT-SEGMENTS",
-        f"#EXT-X-TARGETDURATION:{int(_SEGMENT_DURATION) + 1}",
         "#EXT-X-VERSION:3",
+        f"#EXT-X-TARGETDURATION:{int(_SEGMENT_DURATION) + 1}",
     ]
+    prev_gop: int | None = None
+    prev_frag: int | None = None
     for url in sorted_segments:
+        m = re.search(r"slice_(\d+)_(\d+)_\d+\.ts", url)
+        gop = int(m.group(1)) if m else None
+        frag = int(m.group(2)) if m else None
+        discontinuous = (
+            prev_gop is not None and (
+                gop != prev_gop or (frag is not None and prev_frag is not None and frag != prev_frag + 1)
+            )
+        )
+        if discontinuous:
+            lines.append("#EXT-X-DISCONTINUITY")
         lines.append(f"#EXTINF:{_SEGMENT_DURATION:.3f},")
         lines.append(url)
+        prev_gop = gop
+        prev_frag = frag
     lines.append("#EXT-X-ENDLIST")
     return "\n".join(lines)
 
@@ -56,19 +69,9 @@ def _fix_proxied_m3u8(content: str) -> str:
         if not line:
             continue
         if line.startswith("#EXTINF:"):
-            try:
-                dur_ms = float(line.split(":")[1].rstrip(","))
-                if dur_ms > 1000:
-                    line = f"#EXTINF:{dur_ms / 1000:.3f},"
-            except Exception:
-                pass
+            line = f"#EXTINF:{_SEGMENT_DURATION:.3f},"
         elif line.startswith("#EXT-X-TARGETDURATION:"):
-            try:
-                val = float(line.split(":")[1])
-                if val > 1000:
-                    line = f"#EXT-X-TARGETDURATION:{int(val / 1000) + 1}"
-            except Exception:
-                pass
+            line = f"#EXT-X-TARGETDURATION:{int(_SEGMENT_DURATION) + 1}"
         elif line == "#EXT-X-ENDLIST":
             has_endlist = True
         lines.append(line)
@@ -97,17 +100,7 @@ class BirdfyM3U8ProxyView(HomeAssistantView):
         if coordinator is None:
             return web.Response(status=503, text="Birdfy not ready")
 
-        # Prefer pre-fetched JWT segments (3-day TTL, better compatibility)
-        segments = coordinator.segments_cache.get(alarm_id)
-        if segments:
-            result = _build_m3u8_from_segments(segments)
-            return web.Response(
-                text=result,
-                content_type="application/vnd.apple.mpegurl",
-                headers={"Access-Control-Allow-Origin": "*"},
-            )
-
-        # Fallback: fetch the signed M3U8 URL from cache
+        # Fetch the signed M3U8 URL from cache
         record_url = coordinator.record_url_cache.get(alarm_id)
         if not record_url and coordinator.data:
             for ev in coordinator.data.get("recent_events", []):
