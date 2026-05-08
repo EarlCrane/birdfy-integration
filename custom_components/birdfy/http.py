@@ -21,15 +21,25 @@ def register_views(hass: HomeAssistant) -> None:
     hass.http.register_view(BirdfySegmentProxyView)
 
 
+def _segment_sort_key(url: str) -> tuple[int, int]:
+    """Return (codec, fragment) integers from slice_{codec}_{fragment}_{flag}.ts filename."""
+    import re
+    m = re.search(r"slice_(\d+)_(\d+)_\d+\.ts", url)
+    if m:
+        return int(m.group(1)), int(m.group(2))
+    return (0, 0)
+
+
 def _build_m3u8_from_segments(segments: list[str]) -> str:
     """Build a valid HLS playlist from a list of .ts URLs with JWT tokens."""
+    sorted_segments = sorted(segments, key=_segment_sort_key)
     lines = [
         "#EXTM3U",
         "#EXT-X-INDEPENDENT-SEGMENTS",
         f"#EXT-X-TARGETDURATION:{int(_SEGMENT_DURATION) + 1}",
         "#EXT-X-VERSION:3",
     ]
-    for url in segments:
+    for url in sorted_segments:
         lines.append(f"#EXTINF:{_SEGMENT_DURATION:.3f},")
         lines.append(url)
     lines.append("#EXT-X-ENDLIST")
