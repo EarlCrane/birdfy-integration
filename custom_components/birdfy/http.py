@@ -23,14 +23,15 @@ def register_views(hass: HomeAssistant) -> None:
 
 def _segment_sort_key(url: str) -> tuple[int, int]:
     import re
-    m = re.search(r"slice_(\d+)_(\d+)_\d+\.ts", url)
+    m = re.search(r"slice_\d+_(\d+)_(\d+)\.ts", url)
     if m:
-        return int(m.group(1)), int(m.group(2))
+        return int(m.group(2)), int(m.group(1))  # (gop, fragment_index)
     return (0, 0)
 
 
 def _build_m3u8_from_segments(segments: list[str]) -> str:
-    """Build a valid HLS playlist, inserting EXT-X-DISCONTINUITY at every GOP/fragment gap."""
+    """Build a valid HLS playlist, inserting EXT-X-DISCONTINUITY at every GOP change.
+    Skips frag 0 and 1 — Netvue emits empty init packets at those positions."""
     import re
     sorted_segments = sorted(segments, key=_segment_sort_key)
     lines = [
@@ -39,47 +40,34 @@ def _build_m3u8_from_segments(segments: list[str]) -> str:
         f"#EXT-X-TARGETDURATION:{int(_SEGMENT_DURATION) + 1}",
     ]
     prev_gop: int | None = None
-    prev_frag: int | None = None
     for url in sorted_segments:
-        m = re.search(r"slice_(\d+)_(\d+)_\d+\.ts", url)
-        gop = int(m.group(1)) if m else None
-        frag = int(m.group(2)) if m else None
-        discontinuous = (
-            prev_gop is not None and (
-                gop != prev_gop or (frag is not None and prev_frag is not None and frag != prev_frag + 1)
-            )
-        )
-        if discontinuous:
+        m = re.search(r"slice_\d+_(\d+)_(\d+)\.ts", url)
+        if not m:
+            continue
+        frag = int(m.group(1))
+        gop = int(m.group(2))
+        if frag < 2:
+            continue
+        if prev_gop is not None and gop != prev_gop:
             lines.append("#EXT-X-DISCONTINUITY")
         lines.append(f"#EXTINF:{_SEGMENT_DURATION:.3f},")
         lines.append(url)
         prev_gop = gop
-        prev_frag = frag
     lines.append("#EXT-X-ENDLIST")
     return "\n".join(lines)
 
 
 def _fix_proxied_m3u8(content: str) -> str:
-    """Normalize a Netvue M3U8 fetched from the signed recordUrl."""
+    """Normalize a Netvue M3U8: extract segment URLs and rebuild a clean playlist."""
     content = content.replace(" #", "\n#")
-    lines = []
-    has_endlist = False
+    segments = []
     for line in content.splitlines():
         line = line.strip()
-        if not line:
-            continue
-        if line.startswith("#EXTINF:"):
-            line = f"#EXTINF:{_SEGMENT_DURATION:.3f},"
-        elif line.startswith("#EXT-X-TARGETDURATION:"):
-            line = f"#EXT-X-TARGETDURATION:{int(_SEGMENT_DURATION) + 1}"
-        elif line == "#EXT-X-ENDLIST":
-            has_endlist = True
-        lines.append(line)
-    if not has_endlist:
-        lines.append("#EXT-X-ENDLIST")
-    if lines and lines[0] == "#EXTM3U" and "#EXT-X-INDEPENDENT-SEGMENTS" not in lines:
-        lines.insert(1, "#EXT-X-INDEPENDENT-SEGMENTS")
-    return "\n".join(lines)
+        if line and not line.startswith("#"):
+            segments.append(line)
+    if segments:
+        return _build_m3u8_from_segments(segments)
+    return content
 
 
 class BirdfyM3U8ProxyView(HomeAssistantView):
