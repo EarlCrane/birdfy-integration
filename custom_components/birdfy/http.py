@@ -1,7 +1,7 @@
 """HTTP proxy views for Birdfy HLS streams."""
 from __future__ import annotations
 
-import logging
+import re
 
 import aiohttp
 from aiohttp import web
@@ -10,9 +10,6 @@ from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN
 
-_LOGGER = logging.getLogger(__name__)
-
-# Approximate segment duration in seconds (Netvue segments are ~2s each)
 _SEGMENT_DURATION = 2.0
 
 
@@ -22,7 +19,6 @@ def register_views(hass: HomeAssistant) -> None:
 
 
 def _segment_sort_key(url: str) -> tuple[int, int]:
-    import re
     m = re.search(r"slice_\d+_(\d+)_(\d+)\.ts", url)
     if m:
         return int(m.group(2)), int(m.group(1))  # (gop, fragment_index)
@@ -30,9 +26,7 @@ def _segment_sort_key(url: str) -> tuple[int, int]:
 
 
 def _build_m3u8_from_segments(segments: list[str]) -> str:
-    """Build a valid HLS playlist, inserting EXT-X-DISCONTINUITY at every GOP change.
-    Skips frag 0 and 1 — Netvue emits empty init packets at those positions."""
-    import re
+    """Build a valid HLS playlist, skipping empty Netvue init segments (frag < 2)."""
     sorted_segments = sorted(segments, key=_segment_sort_key)
     lines = [
         "#EXTM3U",
@@ -65,9 +59,9 @@ def _fix_proxied_m3u8(content: str) -> str:
         line = line.strip()
         if line and not line.startswith("#"):
             segments.append(line)
-    if segments:
-        return _build_m3u8_from_segments(segments)
-    return content
+    if not segments:
+        return content
+    return _build_m3u8_from_segments(segments)
 
 
 class BirdfyM3U8ProxyView(HomeAssistantView):
@@ -88,7 +82,6 @@ class BirdfyM3U8ProxyView(HomeAssistantView):
         if coordinator is None:
             return web.Response(status=503, text="Birdfy not ready")
 
-        # Fetch the signed M3U8 URL from cache
         record_url = coordinator.record_url_cache.get(alarm_id)
         if not record_url and coordinator.data:
             for ev in coordinator.data.get("recent_events", []):
