@@ -12,6 +12,7 @@ from .const import DOMAIN
 
 def register_views(hass: HomeAssistant) -> None:
     hass.http.register_view(BirdfyM3U8ProxyView(hass))
+    hass.http.register_view(BirdfyVideoProxyView(hass))
     hass.http.register_view(BirdfySegmentProxyView)
 
 
@@ -107,6 +108,88 @@ class BirdfyM3U8ProxyView(HomeAssistantView):
             content_type="application/vnd.apple.mpegurl",
             headers={"Access-Control-Allow-Origin": "*"},
         )
+
+
+def _extract_segment_urls(content: str) -> list[str]:
+    """Return ordered segment URLs from an M3U8 playlist."""
+    content = content.replace(" #", "\n#")
+    segments: list[tuple[str, float]] = []
+    pending_duration: float = 2.0
+    for line in content.splitlines():
+        line = line.strip()
+        if line.startswith("#EXTINF:"):
+            try:
+                pending_duration = float(line[8:].split(",")[0])
+            except ValueError:
+                pending_duration = 2.0
+        elif line and not line.startswith("#"):
+            segments.append((line, pending_duration))
+            pending_duration = 2.0
+    sorted_segs = sorted(segments, key=lambda x: _segment_sort_key(x[0]))
+    return [url for url, _ in sorted_segs]
+
+
+class BirdfyVideoProxyView(HomeAssistantView):
+    """Streams all .ts segments concatenated as a single video/mp2t response."""
+
+    url = "/api/birdfy/video/{alarm_id}"
+    name = "api:birdfy:video"
+    requires_auth = False
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        self.hass = hass
+
+    async def get(self, request: web.Request, alarm_id: str) -> web.StreamResponse:
+        coordinator = None
+        for c in self.hass.data.get(DOMAIN, {}).values():
+            coordinator = c
+            break
+        if coordinator is None:
+            return web.Response(status=503, text="Birdfy not ready")
+
+        record_url = coordinator.record_url_cache.get(alarm_id)
+        if not record_url and coordinator.data:
+            for ev in coordinator.data.get("recent_events", []):
+                if ev["alarm_id"] == alarm_id:
+                    record_url = ev["record_url"]
+                    break
+
+        if not record_url:
+            return web.Response(status=404, text="Event not found")
+
+        try:
+            async with aiohttp.ClientSession() as s:
+                async with s.get(record_url) as r:
+                    if r.status != 200:
+                        return web.Response(status=r.status, text="Upstream error")
+                    content = await r.text()
+        except Exception as e:
+            return web.Response(status=502, text=str(e))
+
+        segment_urls = _extract_segment_urls(content)
+        if not segment_urls:
+            return web.Response(status=502, text="No segments found")
+
+        response = web.StreamResponse(
+            headers={
+                "Content-Type": "video/mp2t",
+                "Access-Control-Allow-Origin": "*",
+            }
+        )
+        await response.prepare(request)
+
+        async with aiohttp.ClientSession() as s:
+            for seg_url in segment_urls:
+                try:
+                    async with s.get(seg_url) as r:
+                        if r.status == 200:
+                            async for chunk in r.content.iter_chunked(65536):
+                                await response.write(chunk)
+                except Exception:
+                    pass
+
+        await response.write_eof()
+        return response
 
 
 class BirdfySegmentProxyView(HomeAssistantView):
