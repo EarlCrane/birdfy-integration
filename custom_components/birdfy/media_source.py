@@ -50,7 +50,7 @@ class BirdfyMediaSource(MediaSource):
         for ev in events:
             if ev["alarm_id"] == alarm_id:
                 return PlayMedia(
-                    url=f"/api/birdfy/m3u8/{alarm_id}",
+                    url=f"/api/birdfy/mp4/{alarm_id}",
                     mime_type="video/mp4",
                 )
 
