@@ -50,15 +50,15 @@ class BirdfyMediaSource(MediaSource):
         for ev in events:
             if ev["alarm_id"] == alarm_id:
                 return PlayMedia(
-                    url=f"/api/birdfy/video/{alarm_id}",
-                    mime_type="video/mp2t",
+                    url=f"/api/birdfy/m3u8/{alarm_id}",
+                    mime_type="video/mp4",
                 )
 
         # Not in cache — still serve the proxy URL (http.py will fetch it)
         if alarm_id:
             return PlayMedia(
                 url=f"/api/birdfy/m3u8/{alarm_id}",
-                mime_type="application/vnd.apple.mpegurl",
+                mime_type="video/mp4",
             )
         raise Unresolvable(f"Event {alarm_id} not found")
 
@@ -95,7 +95,7 @@ class BirdfyMediaSource(MediaSource):
                     domain=DOMAIN,
                     identifier=f"day:{date_str}",
                     media_class=MediaClass.DIRECTORY,
-                    media_content_type="video/mp2t",
+                    media_content_type="video/mp4",
                     title=label,
                     can_play=False,
                     can_expand=True,
@@ -106,7 +106,7 @@ class BirdfyMediaSource(MediaSource):
             domain=DOMAIN,
             identifier="",
             media_class=MediaClass.DIRECTORY,
-            media_content_type="video/mp2t",
+            media_content_type="video/mp4",
             title="Birdfy",
             can_play=False,
             can_expand=True,
@@ -134,7 +134,7 @@ class BirdfyMediaSource(MediaSource):
                     domain=DOMAIN,
                     identifier=alarm_id,
                     media_class=MediaClass.VIDEO,
-                    media_content_type="video/mp2t",
+                    media_content_type="video/mp4",
                     title=title,
                     can_play=True,
                     can_expand=False,
@@ -149,7 +149,7 @@ class BirdfyMediaSource(MediaSource):
             domain=DOMAIN,
             identifier=f"day:{date_str}",
             media_class=MediaClass.DIRECTORY,
-            media_content_type="video/mp2t",
+            media_content_type="video/mp4",
             title=title,
             can_play=False,
             can_expand=True,

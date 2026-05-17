@@ -10,9 +10,11 @@ from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN
 
+_SEGMENT_DURATION = 2.0
+
+
 def register_views(hass: HomeAssistant) -> None:
     hass.http.register_view(BirdfyM3U8ProxyView(hass))
-    hass.http.register_view(BirdfyVideoProxyView(hass))
     hass.http.register_view(BirdfySegmentProxyView)
 
 
@@ -23,22 +25,26 @@ def _segment_sort_key(url: str) -> tuple[int, int]:
     return (0, 0)
 
 
-def _build_m3u8_from_segments(segments: list[tuple[str, float]]) -> str:
-    """Build a valid HLS playlist from (url, duration) pairs."""
-    sorted_segments = sorted(segments, key=lambda x: _segment_sort_key(x[0]))
-    max_duration = max((d for _, d in sorted_segments), default=2.0)
+def _build_m3u8_from_segments(segments: list[str]) -> str:
+    """Build a valid HLS playlist, skipping empty Netvue init segments (frag < 2)."""
+    sorted_segments = sorted(segments, key=_segment_sort_key)
     lines = [
         "#EXTM3U",
         "#EXT-X-VERSION:3",
-        f"#EXT-X-TARGETDURATION:{int(max_duration) + 1}",
+        f"#EXT-X-TARGETDURATION:{int(_SEGMENT_DURATION) + 1}",
     ]
     prev_gop: int | None = None
-    for url, duration in sorted_segments:
+    for url in sorted_segments:
         m = re.search(r"slice_\d+_(\d+)_(\d+)\.ts", url)
-        gop = int(m.group(2)) if m else 0
+        if not m:
+            continue
+        frag = int(m.group(1))
+        gop = int(m.group(2))
+        if frag < 2:
+            continue
         if prev_gop is not None and gop != prev_gop:
             lines.append("#EXT-X-DISCONTINUITY")
-        lines.append(f"#EXTINF:{duration:.3f},")
+        lines.append(f"#EXTINF:{_SEGMENT_DURATION:.3f},")
         lines.append(url)
         prev_gop = gop
     lines.append("#EXT-X-ENDLIST")
@@ -46,20 +52,13 @@ def _build_m3u8_from_segments(segments: list[tuple[str, float]]) -> str:
 
 
 def _fix_proxied_m3u8(content: str) -> str:
-    """Normalize a Netvue M3U8: preserve EXTINF durations and rebuild a clean playlist."""
+    """Normalize a Netvue M3U8: extract segment URLs and rebuild a clean playlist."""
     content = content.replace(" #", "\n#")
-    segments: list[tuple[str, float]] = []
-    pending_duration: float = 2.0
+    segments = []
     for line in content.splitlines():
         line = line.strip()
-        if line.startswith("#EXTINF:"):
-            try:
-                pending_duration = float(line[8:].split(",")[0])
-            except ValueError:
-                pending_duration = 2.0
-        elif line and not line.startswith("#"):
-            segments.append((line, pending_duration))
-            pending_duration = 2.0
+        if line and not line.startswith("#"):
+            segments.append(line)
     if not segments:
         return content
     return _build_m3u8_from_segments(segments)
@@ -108,88 +107,6 @@ class BirdfyM3U8ProxyView(HomeAssistantView):
             content_type="application/vnd.apple.mpegurl",
             headers={"Access-Control-Allow-Origin": "*"},
         )
-
-
-def _extract_segment_urls(content: str) -> list[str]:
-    """Return ordered segment URLs from an M3U8 playlist."""
-    content = content.replace(" #", "\n#")
-    segments: list[tuple[str, float]] = []
-    pending_duration: float = 2.0
-    for line in content.splitlines():
-        line = line.strip()
-        if line.startswith("#EXTINF:"):
-            try:
-                pending_duration = float(line[8:].split(",")[0])
-            except ValueError:
-                pending_duration = 2.0
-        elif line and not line.startswith("#"):
-            segments.append((line, pending_duration))
-            pending_duration = 2.0
-    sorted_segs = sorted(segments, key=lambda x: _segment_sort_key(x[0]))
-    return [url for url, _ in sorted_segs]
-
-
-class BirdfyVideoProxyView(HomeAssistantView):
-    """Streams all .ts segments concatenated as a single video/mp2t response."""
-
-    url = "/api/birdfy/video/{alarm_id}"
-    name = "api:birdfy:video"
-    requires_auth = False
-
-    def __init__(self, hass: HomeAssistant) -> None:
-        self.hass = hass
-
-    async def get(self, request: web.Request, alarm_id: str) -> web.StreamResponse:
-        coordinator = None
-        for c in self.hass.data.get(DOMAIN, {}).values():
-            coordinator = c
-            break
-        if coordinator is None:
-            return web.Response(status=503, text="Birdfy not ready")
-
-        record_url = coordinator.record_url_cache.get(alarm_id)
-        if not record_url and coordinator.data:
-            for ev in coordinator.data.get("recent_events", []):
-                if ev["alarm_id"] == alarm_id:
-                    record_url = ev["record_url"]
-                    break
-
-        if not record_url:
-            return web.Response(status=404, text="Event not found")
-
-        try:
-            async with aiohttp.ClientSession() as s:
-                async with s.get(record_url) as r:
-                    if r.status != 200:
-                        return web.Response(status=r.status, text="Upstream error")
-                    content = await r.text()
-        except Exception as e:
-            return web.Response(status=502, text=str(e))
-
-        segment_urls = _extract_segment_urls(content)
-        if not segment_urls:
-            return web.Response(status=502, text="No segments found")
-
-        response = web.StreamResponse(
-            headers={
-                "Content-Type": "video/mp2t",
-                "Access-Control-Allow-Origin": "*",
-            }
-        )
-        await response.prepare(request)
-
-        async with aiohttp.ClientSession() as s:
-            for seg_url in segment_urls:
-                try:
-                    async with s.get(seg_url) as r:
-                        if r.status == 200:
-                            async for chunk in r.content.iter_chunked(65536):
-                                await response.write(chunk)
-                except Exception:
-                    pass
-
-        await response.write_eof()
-        return response
 
 
 class BirdfySegmentProxyView(HomeAssistantView):
