@@ -26,7 +26,7 @@ def _segment_sort_key(url: str) -> tuple[int, int]:
 
 
 def _build_m3u8_from_segments(segments: list[str]) -> str:
-    """Build a valid HLS playlist, skipping empty Netvue init segments (frag < 2)."""
+    """Build a valid HLS playlist from segment URLs."""
     sorted_segments = sorted(segments, key=_segment_sort_key)
     lines = [
         "#EXTM3U",
@@ -38,10 +38,7 @@ def _build_m3u8_from_segments(segments: list[str]) -> str:
         m = re.search(r"slice_\d+_(\d+)_(\d+)\.ts", url)
         if not m:
             continue
-        frag = int(m.group(1))
         gop = int(m.group(2))
-        if frag < 2:
-            continue
         if prev_gop is not None and gop != prev_gop:
             lines.append("#EXT-X-DISCONTINUITY")
         lines.append(f"#EXTINF:{_SEGMENT_DURATION:.3f},")
