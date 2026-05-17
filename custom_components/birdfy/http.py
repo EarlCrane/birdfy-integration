@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import re
+import tempfile
 
 import aiohttp
 from aiohttp import web
@@ -137,45 +139,46 @@ class BirdfyMp4ProxyView(HomeAssistantView):
                     break
 
         if not record_url:
+            record_url = await coordinator.fetch_fresh_record_url(alarm_id)
+
+        if not record_url:
             return web.Response(status=404, text="Event not found")
 
+        tmp_fd, tmp_path = tempfile.mkstemp(suffix=".mp4")
+        os.close(tmp_fd)
         try:
-            proc = await asyncio.create_subprocess_exec(
-                "ffmpeg",
-                "-i", record_url,
-                "-c", "copy",
-                "-movflags", "frag_keyframe+empty_moov+faststart",
-                "-f", "mp4",
-                "pipe:1",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.DEVNULL,
-            )
-        except FileNotFoundError:
-            _LOGGER.error("ffmpeg not found — cannot transcode HLS to MP4")
-            return web.Response(status=500, text="ffmpeg not available")
-
-        response = web.StreamResponse(
-            headers={
-                "Content-Type": "video/mp4",
-                "Access-Control-Allow-Origin": "*",
-            }
-        )
-        await response.prepare(request)
-
-        try:
-            while True:
-                chunk = await proc.stdout.read(65536)
-                if not chunk:
-                    break
-                await response.write(chunk)
-        finally:
             try:
-                proc.kill()
-            except ProcessLookupError:
-                pass
+                proc = await asyncio.create_subprocess_exec(
+                    "ffmpeg", "-y",
+                    "-f", "hls",
+                    "-i", record_url,
+                    "-c", "copy",
+                    "-movflags", "faststart",
+                    "-f", "mp4",
+                    tmp_path,
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+            except FileNotFoundError:
+                _LOGGER.error("ffmpeg not found — cannot transcode HLS to MP4")
+                return web.Response(status=500, text="ffmpeg not available")
 
-        await response.write_eof()
-        return response
+            _, stderr_data = await proc.communicate()
+
+            if proc.returncode != 0 or os.path.getsize(tmp_path) == 0:
+                _LOGGER.error("ffmpeg failed for %s: %s", alarm_id, stderr_data.decode(errors="replace"))
+                return web.Response(status=502, text="ffmpeg failed")
+
+            with open(tmp_path, "rb") as f:
+                mp4_data = f.read()
+        finally:
+            os.unlink(tmp_path)
+
+        return web.Response(
+            body=mp4_data,
+            content_type="video/mp4",
+            headers={"Access-Control-Allow-Origin": "*"},
+        )
 
 
 class BirdfySegmentProxyView(HomeAssistantView):
