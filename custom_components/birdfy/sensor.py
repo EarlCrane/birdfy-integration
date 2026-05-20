@@ -20,6 +20,7 @@ async def async_setup_entry(
     async_add_entities([
         BirdfyLastEventSensor(coordinator, entry),
         BirdfyHighlightsSensor(coordinator, entry),
+        BirdfyRecapSensor(coordinator, entry),
     ])
 
 
@@ -69,3 +70,18 @@ class BirdfyHighlightsSensor(CoordinatorEntity[BirdfyCoordinator], SensorEntity)
     @property
     def native_value(self) -> str:
         return self.coordinator.highlights_url or None
+
+
+class BirdfyRecapSensor(CoordinatorEntity[BirdfyCoordinator], SensorEntity):
+    """Birdfy recap URL sensor."""
+
+    _attr_icon = "mdi:image-album"
+
+    def __init__(self, coordinator: BirdfyCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_recap"
+        self._attr_name = "Birdfy Recap"
+
+    @property
+    def native_value(self) -> str:
+        return self.coordinator.recap_url or None

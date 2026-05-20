@@ -103,6 +103,7 @@ class BirdfyCoordinator(DataUpdateCoordinator):
         self._device_id = ""
         self.image_url  = ""
         self.highlights_url = ""
+        self.recap_url = ""
         self.record_url_cache: dict[str, str] = {}
         self.segments_cache: dict[str, list[str]] = {}
         self.thumbnail_cache: dict[str, str] = {}
@@ -290,6 +291,7 @@ class BirdfyCoordinator(DataUpdateCoordinator):
                     if r.status == 200:
                         ds = await r.json(content_type=None)
                         self.highlights_url = ds.get("highlightsUrl", "")
+                        self.recap_url = ds.get("recapUrl", "")
             except Exception:
                 pass
 
