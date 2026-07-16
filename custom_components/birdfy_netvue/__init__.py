@@ -1,4 +1,4 @@
-"""Birdfy integration."""
+"""Birdfy Netvue integration."""
 from __future__ import annotations
 
 import asyncio
@@ -22,8 +22,8 @@ _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = [Platform.SENSOR, Platform.CAMERA]
 
-DEFAULT_THUMBNAIL_PATH = "/media/birdfy_thumbnails"
-DEFAULT_VIDEO_PATH = "/media/birdfy_videos"
+DEFAULT_THUMBNAIL_PATH = "/media/birdfy_netvue_thumbnails"
+DEFAULT_VIDEO_PATH = "/media/birdfy_netvue_videos"
 SERVICE_DOWNLOAD_THUMBNAILS = "download_thumbnails"
 SERVICE_DOWNLOAD_VIDEOS = "download_videos"
 
@@ -102,7 +102,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         except Exception as e:
                             _LOGGER.warning("Failed to download thumbnail %s: %s", alarm_id, e)
 
-        _LOGGER.info("Birdfy thumbnails: %d downloaded, %d skipped", downloaded, skipped)
+        _LOGGER.info("Birdfy Netvue thumbnails: %d downloaded, %d skipped", downloaded, skipped)
 
     async def handle_download_videos(call: ServiceCall) -> None:
         days = call.data.get("days", 1)
@@ -180,7 +180,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         if os.path.exists(tmp_path):
                             os.unlink(tmp_path)
 
-        _LOGGER.info("Birdfy videos: %d downloaded, %d skipped", downloaded, skipped)
+        _LOGGER.info("Birdfy Netvue videos: %d downloaded, %d skipped", downloaded, skipped)
 
     hass.services.async_register(
         DOMAIN, SERVICE_DOWNLOAD_THUMBNAILS, handle_download_thumbnails, schema=_MEDIA_SCHEMA

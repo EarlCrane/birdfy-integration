@@ -1,4 +1,4 @@
-"""Config flow for Birdfy integration."""
+"""Config flow for Birdfy Netvue integration."""
 from __future__ import annotations
 
 import hashlib
@@ -58,7 +58,7 @@ async def _test_login(email: str, password: str, udid: str, region: str) -> str 
 
 
 class BirdfyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle the Birdfy config flow."""
+    """Handle the Birdfy Netvue config flow."""
 
     VERSION = 1
 

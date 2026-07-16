@@ -32,7 +32,7 @@ class BirdfyLastEventSensor(CoordinatorEntity[BirdfyCoordinator], SensorEntity):
     def __init__(self, coordinator: BirdfyCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_last_event"
-        self._attr_name = "Birdfy Last Event"
+        self._attr_name = "Birdfy Netvue Last Event"
 
     @property
     def native_value(self) -> str:
@@ -65,7 +65,7 @@ class BirdfyHighlightsSensor(CoordinatorEntity[BirdfyCoordinator], SensorEntity)
     def __init__(self, coordinator: BirdfyCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_highlights"
-        self._attr_name = "Birdfy Highlights"
+        self._attr_name = "Birdfy Netvue Highlights"
 
     @property
     def native_value(self) -> str:
@@ -80,7 +80,7 @@ class BirdfyRecapSensor(CoordinatorEntity[BirdfyCoordinator], SensorEntity):
     def __init__(self, coordinator: BirdfyCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_recap"
-        self._attr_name = "Birdfy Recap"
+        self._attr_name = "Birdfy Netvue Recap"
 
     @property
     def native_value(self) -> str:

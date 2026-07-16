@@ -1,6 +1,6 @@
 download_thumbnails:
   name: Download Thumbnails
-  description: Download Birdfy event thumbnails to a local or network path (delta mode — skips already downloaded files).
+  description: Download Birdfy Netvue event thumbnails to a local or network path (delta mode — skips already downloaded files).
   fields:
     days:
       name: Days
@@ -20,14 +20,14 @@ download_thumbnails:
     path:
       name: Custom path
       description: Full path where thumbnails will be saved. Used only if share is not set.
-      default: /media/birdfy_thumbnails
-      example: /media/birdfy_thumbnails
+      default: /media/birdfy_netvue_thumbnails
+      example: /media/birdfy_netvue_thumbnails
       selector:
         text:
 
 download_videos:
   name: Download Videos
-  description: Download Birdfy event videos (MP4) to a local or network path (delta mode — skips already downloaded files).
+  description: Download Birdfy Netvue event videos (MP4) to a local or network path (delta mode — skips already downloaded files).
   fields:
     days:
       name: Days
@@ -47,7 +47,7 @@ download_videos:
     path:
       name: Custom path
       description: Full path where videos will be saved. Used only if share is not set.
-      default: /media/birdfy_videos
-      example: /media/birdfy_videos
+      default: /media/birdfy_netvue_videos
+      example: /media/birdfy_netvue_videos
       selector:
         text:

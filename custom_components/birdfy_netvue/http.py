@@ -1,4 +1,4 @@
-"""HTTP proxy views for Birdfy HLS streams."""
+"""HTTP proxy views for Birdfy Netvue HLS streams."""
 from __future__ import annotations
 
 import asyncio
@@ -93,8 +93,8 @@ def _fix_proxied_m3u8(content: str) -> str:
 class BirdfyM3U8ProxyView(HomeAssistantView):
     """Serves an HLS playlist for a given alarm_id."""
 
-    url = "/api/birdfy/m3u8/{alarm_id}"
-    name = "api:birdfy:m3u8"
+    url = "/api/birdfy_netvue/m3u8/{alarm_id}"
+    name = "api:birdfy_netvue:m3u8"
     requires_auth = False
 
     def __init__(self, hass: HomeAssistant) -> None:
@@ -138,8 +138,8 @@ class BirdfyM3U8ProxyView(HomeAssistantView):
 class BirdfyMp4ProxyView(HomeAssistantView):
     """Transcodes HLS segments to fMP4 via ffmpeg and streams to browser."""
 
-    url = "/api/birdfy/mp4/{alarm_id}"
-    name = "api:birdfy:mp4"
+    url = "/api/birdfy_netvue/mp4/{alarm_id}"
+    name = "api:birdfy_netvue:mp4"
     requires_auth = False
 
     def __init__(self, hass: HomeAssistant) -> None:
@@ -206,8 +206,8 @@ class BirdfyMp4ProxyView(HomeAssistantView):
 class BirdfySegmentProxyView(HomeAssistantView):
     """Proxies a single .ts segment from S3 (fallback for old-style URLs)."""
 
-    url = "/api/birdfy/segment/{encoded_url}"
-    name = "api:birdfy:segment"
+    url = "/api/birdfy_netvue/segment/{encoded_url}"
+    name = "api:birdfy_netvue:segment"
     requires_auth = False
 
     async def get(self, request: web.Request, encoded_url: str) -> web.Response:

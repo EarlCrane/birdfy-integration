@@ -1,4 +1,4 @@
-"""Birdfy Media Source — browse and play recorded events by day."""
+"""Birdfy Netvue Media Source — browse and play recorded events by day."""
 from __future__ import annotations
 
 import datetime
@@ -25,9 +25,9 @@ async def async_get_media_source(hass: HomeAssistant) -> BirdfyMediaSource:
 
 
 class BirdfyMediaSource(MediaSource):
-    """Birdfy recorded events as a browsable media source."""
+    """Birdfy Netvue recorded events as a browsable media source."""
 
-    name = "Birdfy"
+    name = "Birdfy Netvue"
 
     def __init__(self, hass: HomeAssistant) -> None:
         super().__init__(DOMAIN)
@@ -50,14 +50,14 @@ class BirdfyMediaSource(MediaSource):
         for ev in events:
             if ev["alarm_id"] == alarm_id:
                 return PlayMedia(
-                    url=f"/api/birdfy/mp4/{alarm_id}",
+                    url=f"/api/birdfy_netvue/mp4/{alarm_id}",
                     mime_type="video/mp4",
                 )
 
         # Not in cache — still serve the proxy URL (http.py will fetch it)
         if alarm_id:
             return PlayMedia(
-                url=f"/api/birdfy/m3u8/{alarm_id}",
+                url=f"/api/birdfy_netvue/m3u8/{alarm_id}",
                 mime_type="video/mp4",
             )
         raise Unresolvable(f"Event {alarm_id} not found")
@@ -107,7 +107,7 @@ class BirdfyMediaSource(MediaSource):
             identifier="",
             media_class=MediaClass.DIRECTORY,
             media_content_type=MediaType.VIDEO,
-            title="Birdfy",
+            title="Birdfy Netvue",
             can_play=False,
             can_expand=True,
             children=children,

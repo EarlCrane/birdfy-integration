@@ -1,4 +1,4 @@
-"""Birdfy DataUpdateCoordinator — polls Netvue Android API."""
+"""Birdfy Netvue DataUpdateCoordinator — polls Netvue Android API."""
 from __future__ import annotations
 
 import hashlib
@@ -110,7 +110,7 @@ class BirdfyCoordinator(DataUpdateCoordinator):
     def __init__(self, hass: HomeAssistant, email: str, password: str,
                  ucid: str = "", udid: str = "",
                  region: str = DEFAULT_REGION) -> None:
-        super().__init__(hass, _LOGGER, name="birdfy", update_interval=SCAN_INTERVAL)
+        super().__init__(hass, _LOGGER, name="birdfy_netvue", update_interval=SCAN_INTERVAL)
         self._email    = email
         self._password = password
         self._ucid     = ucid

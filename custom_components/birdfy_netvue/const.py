@@ -1,6 +1,6 @@
-"""Constants for the Birdfy integration."""
+"""Constants for the Birdfy Netvue integration."""
 
-DOMAIN = "birdfy"
+DOMAIN = "birdfy_netvue"
 
 CONF_REGION = "region"
 DEFAULT_REGION = "us-east-1"
