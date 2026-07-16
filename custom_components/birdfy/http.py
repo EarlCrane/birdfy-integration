@@ -6,6 +6,7 @@ import logging
 import os
 import re
 import tempfile
+from urllib.parse import unquote, urlsplit
 
 import aiohttp
 from aiohttp import web
@@ -17,6 +18,27 @@ from .const import DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 _SEGMENT_DURATION = 2.0
+
+
+def _is_allowed_media_url(url: str) -> bool:
+    """Return whether a URL points at a known Netvue media origin."""
+    parsed = urlsplit(url)
+    if parsed.scheme != "https" or not parsed.hostname:
+        return False
+
+    hostname = parsed.hostname.lower()
+    if hostname.startswith("cdn-nvs-") and hostname.endswith(
+        ("-videomotion.nvts.co", "-motioncapture.nvts.co")
+    ):
+        return True
+
+    return bool(
+        re.fullmatch(
+            r"nvs-[a-z0-9-]+-(?:video)?motion\.s3"
+            r"(?:[.-][a-z0-9-]+)?\.amazonaws\.com",
+            hostname,
+        )
+    )
 
 
 def register_views(hass: HomeAssistant) -> None:
@@ -189,10 +211,9 @@ class BirdfySegmentProxyView(HomeAssistantView):
     requires_auth = False
 
     async def get(self, request: web.Request, encoded_url: str) -> web.Response:
-        import urllib.parse
-        url = urllib.parse.unquote(urllib.parse.unquote(encoded_url))
+        url = unquote(unquote(encoded_url))
 
-        if not url.startswith("https://nvs-eu-central-1-videomotion.s3"):
+        if not _is_allowed_media_url(url):
             return web.Response(status=403, text="Forbidden")
 
         try:

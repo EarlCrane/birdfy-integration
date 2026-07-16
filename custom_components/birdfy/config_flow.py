@@ -10,17 +10,16 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
 
-from .const import DOMAIN
+from .const import CONF_REGION, DEFAULT_REGION, DOMAIN, SUPPORTED_REGIONS
 
 _LOGGER = logging.getLogger(__name__)
-
-LOGIN_URL = "https://localweb.nvts.co/v1/users/login/v2"
 
 UCID = "b3cf543b57"
 
 STEP_SCHEMA = vol.Schema({
     vol.Required(CONF_EMAIL): str,
     vol.Required(CONF_PASSWORD): str,
+    vol.Required(CONF_REGION, default=DEFAULT_REGION): vol.In(SUPPORTED_REGIONS),
 })
 
 
@@ -28,7 +27,7 @@ def _generate_udid() -> str:
     return f"android-{uuid.uuid4()}"
 
 
-async def _test_login(email: str, password: str, udid: str) -> str | None:
+async def _test_login(email: str, password: str, udid: str, region: str) -> str | None:
     """Return error key or None on success."""
     pwd_md5 = hashlib.md5(password.encode()).hexdigest()
     payload = {"username": email, "password": pwd_md5, "locale": "en-US"}
@@ -39,18 +38,23 @@ async def _test_login(email: str, password: str, udid: str) -> str | None:
         "x-nvs-udid": udid,
         "User-Agent": "Birdfy/1.19.2 (build 123960) NetvueSDK/1.6.1 Android/12",
     }
-    try:
-        async with aiohttp.ClientSession() as s:
-            async with s.post(LOGIN_URL, json=payload, headers=headers) as r:
-                data = await r.json(content_type=None)
-                _LOGGER.debug("Birdfy login response: %s", data)
-                if data.get("ret", 0) != 0 or not data.get("token"):
-                    _LOGGER.error("Birdfy login failed: %s", data)
-                    return "invalid_auth"
-    except Exception as e:
-        _LOGGER.error("Birdfy login exception: %s", e)
-        return "cannot_connect"
-    return None
+    login_urls = (
+        f"https://{region}-localweb.nvts.co/v1/users/login/v2",
+        "https://localweb.nvts.co/v1/users/login/v2",
+    )
+    connected = False
+    async with aiohttp.ClientSession() as s:
+        for url in login_urls:
+            try:
+                async with s.post(url, json=payload, headers=headers) as r:
+                    data = await r.json(content_type=None)
+                    connected = True
+            except (aiohttp.ClientError, ValueError) as err:
+                _LOGGER.debug("Birdfy login endpoint %s failed: %s", url, err)
+                continue
+            if data.get("ret", 0) == 0 and data.get("token"):
+                return None
+    return "invalid_auth" if connected else "cannot_connect"
 
 
 class BirdfyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -62,7 +66,12 @@ class BirdfyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
         if user_input is not None:
             udid = _generate_udid()
-            error = await _test_login(user_input[CONF_EMAIL], user_input[CONF_PASSWORD], udid)
+            error = await _test_login(
+                user_input[CONF_EMAIL],
+                user_input[CONF_PASSWORD],
+                udid,
+                user_input[CONF_REGION],
+            )
             if error:
                 errors["base"] = error
             else:
@@ -75,6 +84,7 @@ class BirdfyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_PASSWORD: user_input[CONF_PASSWORD],
                         "ucid": UCID,
                         "udid": udid,
+                        CONF_REGION: user_input[CONF_REGION],
                     },
                 )
 

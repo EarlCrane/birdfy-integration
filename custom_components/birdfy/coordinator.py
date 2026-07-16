@@ -12,12 +12,15 @@ import aiohttp
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
+from .const import DEFAULT_REGION, SUPPORTED_REGIONS
+
 _LOGGER = logging.getLogger(__name__)
 
 SCAN_INTERVAL = timedelta(minutes=5)
 
-API_BASE  = "https://eu-central-1-api2.nvts.co"
-LOGIN_URL = "https://localweb.nvts.co/v1/users/login/v2"
+GLOBAL_LOGIN_URL = "https://localweb.nvts.co/v1/users/login/v2"
+GLOBAL_DEVICES_URL = "https://localweb.nvts.co/v1/devices/v3"
+GLOBAL_DOWNLOAD_LINK_URL = "https://localapi2.nvts.co/event/downloadLink"
 
 
 def _hmac_sha256(key: bytes, msg: str) -> str:
@@ -50,8 +53,14 @@ def _auth_headers(token: str, userid: str, ucid: str, udid: str) -> dict:
     }
 
 
-async def _android_login(session: aiohttp.ClientSession, email: str, password: str,
-                          ucid: str, udid: str) -> dict:
+async def _android_login(
+    session: aiohttp.ClientSession,
+    email: str,
+    password: str,
+    ucid: str,
+    udid: str,
+    login_urls: tuple[str, ...],
+) -> dict:
     pwd_md5 = hashlib.md5(password.encode()).hexdigest()
     payload = {"username": email, "password": pwd_md5, "locale": "en-US"}
     headers = {
@@ -61,11 +70,18 @@ async def _android_login(session: aiohttp.ClientSession, email: str, password: s
         "x-nvs-udid": udid,
         "User-Agent": "Birdfy/1.19.2 (build 123960) NetvueSDK/1.6.1 Android/12",
     }
-    async with session.post(LOGIN_URL, json=payload, headers=headers) as r:
-        data = await r.json(content_type=None)
-        if data.get("ret", 0) != 0 or not data.get("token"):
-            raise UpdateFailed(f"Login failed: {data.get('msg', data)}")
-        return data
+    last_error = "authentication rejected"
+    for url in login_urls:
+        try:
+            async with session.post(url, json=payload, headers=headers) as r:
+                data = await r.json(content_type=None)
+        except (aiohttp.ClientError, ValueError) as err:
+            last_error = str(err)
+            continue
+        if data.get("ret", 0) == 0 and data.get("token"):
+            return data
+        last_error = str(data.get("msg", "authentication rejected"))
+    raise UpdateFailed(f"Login failed: {last_error}")
 
 
 def _parse_event(ev: dict) -> dict:
@@ -92,12 +108,27 @@ class BirdfyCoordinator(DataUpdateCoordinator):
     """Polls Netvue API and stores latest events."""
 
     def __init__(self, hass: HomeAssistant, email: str, password: str,
-                 ucid: str = "", udid: str = "") -> None:
+                 ucid: str = "", udid: str = "",
+                 region: str = DEFAULT_REGION) -> None:
         super().__init__(hass, _LOGGER, name="birdfy", update_interval=SCAN_INTERVAL)
         self._email    = email
         self._password = password
         self._ucid     = ucid
         self._udid     = udid
+        self._region = region if region in SUPPORTED_REGIONS else DEFAULT_REGION
+        self._api_base = f"https://{self._region}-api2.nvts.co"
+        self._login_urls = (
+            f"https://{self._region}-localweb.nvts.co/v1/users/login/v2",
+            GLOBAL_LOGIN_URL,
+        )
+        self._devices_urls = (
+            f"https://{self._region}-localweb.nvts.co/v1/devices/v3",
+            GLOBAL_DEVICES_URL,
+        )
+        self._download_link_urls = (
+            f"https://{self._region}-localapi2.nvts.co/event/downloadLink",
+            GLOBAL_DOWNLOAD_LINK_URL,
+        )
         self._token    = ""
         self._userid   = ""
         self._device_id = ""
@@ -111,17 +142,37 @@ class BirdfyCoordinator(DataUpdateCoordinator):
     async def _ensure_login(self, session: aiohttp.ClientSession) -> None:
         if self._token:
             return
-        data = await _android_login(session, self._email, self._password, self._ucid, self._udid)
+        data = await _android_login(
+            session,
+            self._email,
+            self._password,
+            self._ucid,
+            self._udid,
+            self._login_urls,
+        )
         self._token  = data["token"]
         self._userid = str(data["userID"])
 
     async def _ensure_device(self, session: aiohttp.ClientSession) -> None:
         if self._device_id:
             return
-        url = "https://localweb.nvts.co/v1/devices/v3"
-        async with session.get(url, headers=_auth_headers(self._token, self._userid, self._ucid, self._udid)) as r:
-            data = await r.json(content_type=None)
-        devices = data.get("devices", data.get("deviceList", []))
+        devices = []
+        for url in self._devices_urls:
+            try:
+                async with session.get(
+                    url,
+                    headers=_auth_headers(
+                        self._token, self._userid, self._ucid, self._udid
+                    ),
+                ) as r:
+                    if r.status != 200:
+                        continue
+                    data = await r.json(content_type=None)
+            except (aiohttp.ClientError, ValueError):
+                continue
+            devices = data.get("devices", data.get("deviceList", []))
+            if devices:
+                break
         if not devices:
             raise UpdateFailed("No devices found in Birdfy account")
         dev = devices[0]
@@ -133,7 +184,7 @@ class BirdfyCoordinator(DataUpdateCoordinator):
         )
 
     async def _fetch_image_url(self, session: aiohttp.ClientSession, alarm_id: str) -> str:
-        url = f"{API_BASE}/devices/{self._device_id}/events/{alarm_id}/pic"
+        url = f"{self._api_base}/devices/{self._device_id}/events/{alarm_id}/pic"
         async with session.get(url, headers=_auth_headers(self._token, self._userid, self._ucid, self._udid)) as r:
             if r.status == 200:
                 data = await r.json(content_type=None)
@@ -163,17 +214,23 @@ class BirdfyCoordinator(DataUpdateCoordinator):
         if not event_list:
             return
 
-        try:
-            async with session.post(
-                "https://localapi2.nvts.co/event/downloadLink",
-                json={"eventList": event_list},
-                headers=_auth_headers(self._token, self._userid, self._ucid, self._udid),
-            ) as r:
-                if r.status != 200:
-                    return
-                data = await r.json(content_type=None)
-        except Exception:
-            return
+        data = {}
+        for url in self._download_link_urls:
+            try:
+                async with session.post(
+                    url,
+                    json={"eventList": event_list},
+                    headers=_auth_headers(
+                        self._token, self._userid, self._ucid, self._udid
+                    ),
+                ) as r:
+                    if r.status != 200:
+                        continue
+                    data = await r.json(content_type=None)
+            except (aiohttp.ClientError, ValueError):
+                continue
+            if data.get("eventList"):
+                break
 
         for item in data.get("eventList", []):
             alarm_id = item.get("alarmId", "")
@@ -188,7 +245,7 @@ class BirdfyCoordinator(DataUpdateCoordinator):
 
     async def fetch_fresh_record_url(self, alarm_id: str) -> str:
         """Fetch a fresh (non-expired) record URL for a given alarm_id."""
-        url = f"{API_BASE}/devices/{self._device_id}/events/{alarm_id}"
+        url = f"{self._api_base}/devices/{self._device_id}/events/{alarm_id}"
         async with aiohttp.ClientSession() as session:
             await self._ensure_login(session)
             await self._ensure_device(session)
@@ -214,7 +271,7 @@ class BirdfyCoordinator(DataUpdateCoordinator):
         d = datetime.datetime.strptime(date_str, "%Y-%m-%d")
         start_ts = int(datetime.datetime(d.year, d.month, d.day, 0, 0, 0).timestamp() * 1000)
         end_ts   = int(datetime.datetime(d.year, d.month, d.day, 23, 59, 59).timestamp() * 1000)
-        url = f"{API_BASE}/devices/{self._device_id}/events"
+        url = f"{self._api_base}/devices/{self._device_id}/events"
         params = {
             "limit": 100,
             "ignoreAiLabels": "false",
@@ -253,7 +310,7 @@ class BirdfyCoordinator(DataUpdateCoordinator):
             except Exception as e:
                 raise UpdateFailed(f"Device fetch error: {e}") from e
 
-            url = f"{API_BASE}/devices/{self._device_id}/events"
+            url = f"{self._api_base}/devices/{self._device_id}/events"
             params = {"limit": 10, "ignoreAiLabels": "false", "reverse": 1}
             try:
                 async with session.get(
@@ -299,4 +356,5 @@ class BirdfyCoordinator(DataUpdateCoordinator):
                 "last_event":    last,
                 "recent_events": events,
                 "device_id":     self._device_id,
+                "region":        self._region,
             }

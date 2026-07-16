@@ -12,6 +12,7 @@ Home Assistant custom integration for [Birdfy](https://www.birdfy.com/) smart bi
 - **Download thumbnails**: save event thumbnails to local or network storage (delta mode)
 - **Download videos**: save event videos as MP4 to local or network storage (delta mode)
 - Polls the Netvue cloud API every 5 minutes
+- Supports Netvue's US East and EU Central cloud regions
 - Multi-device support
 - No local hardware required
 
@@ -19,11 +20,11 @@ Home Assistant custom integration for [Birdfy](https://www.birdfy.com/) smart bi
 
 1. In Home Assistant, go to **HACS → Integrations**
 2. Click the three-dot menu → **Custom repositories**
-3. Add `https://github.com/sebsst/birdfy-integration` with category **Integration**
+3. Add `https://github.com/EarlCrane/birdfy-integration` with category **Integration**
 4. Install **Birdfy Integration**
 5. Restart Home Assistant
 6. Go to **Settings → Devices & Services → Add Integration** → search for **Birdfy**
-7. Enter your Netvue/Birdfy account email and password
+7. Enter your Netvue/Birdfy account email, password, and cloud region
 
 ## Entities
 
@@ -102,6 +103,7 @@ To use a NAS or network share:
 
 ## Notes
 
+- US accounts use the `us-east-1` API and Netvue's US East motion/video CDNs; existing entries created before version 1.0.29 default to US East
 - The `label` field is always `unknown` if your camera model does not return AI classification
 - SD card recordings are stored as HLS streams on Netvue S3 servers, valid for approximately 1 hour after fetch
 - Video download requires ffmpeg (available by default on HA OS)

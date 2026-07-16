@@ -14,7 +14,7 @@ from homeassistant.const import CONF_EMAIL, CONF_PASSWORD, Platform
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
 
-from .const import DOMAIN
+from .const import CONF_REGION, DEFAULT_REGION, DOMAIN
 from .coordinator import BirdfyCoordinator
 from .http import register_views
 
@@ -41,6 +41,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         password=entry.data.get(CONF_PASSWORD) or entry.data.get("password", ""),
         ucid=entry.data.get("ucid", ""),
         udid=entry.data.get("udid", ""),
+        region=entry.data.get(CONF_REGION, DEFAULT_REGION),
     )
     await coordinator.async_config_entry_first_refresh()
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
