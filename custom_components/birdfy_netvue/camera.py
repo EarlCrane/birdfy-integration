@@ -33,7 +33,7 @@ class BirdfyThumbnailCamera(CoordinatorEntity[BirdfyCoordinator], Camera):
         CoordinatorEntity.__init__(self, coordinator)
         Camera.__init__(self)
         self._attr_unique_id = f"{entry.entry_id}_thumbnail"
-        self._attr_name = "Birdfy Thumbnail"
+        self._attr_name = "Birdfy Netvue Thumbnail"
         self._cached_image: bytes | None = None
         self._cached_url: str = ""
 

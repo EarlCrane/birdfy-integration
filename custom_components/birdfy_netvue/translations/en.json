@@ -2,11 +2,12 @@
   "config": {
     "step": {
       "user": {
-        "title": "Birdfy",
-        "description": "Enter your Netvue/Birdfy account credentials.",
+        "title": "Birdfy Netvue",
+        "description": "Enter your Netvue/Birdfy account credentials and cloud region.",
         "data": {
           "email": "Email",
-          "password": "Password"
+          "password": "Password",
+          "region": "Cloud region"
         }
       }
     },
